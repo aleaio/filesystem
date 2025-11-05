@@ -1,0 +1,81 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wordpress
+  namespace: lamp
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: wordpress
+  template:
+    metadata:
+      labels:
+        app: wordpress
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - wordpress
+              topologyKey: kubernetes.io/hostname
+      containers:
+      - name: wordpress
+        image: wordpress:6.0-php8.1-apache
+        env:
+        - name: WORDPRESS_DB_HOST
+          value: mysql-0.mysql.lamp.svc.cluster.local:3306
+        - name: WORDPRESS_DB_USER
+          value: wp_user
+        - name: WORDPRESS_DB_PASSWORD
+          value: Lhj230200601
+        - name: WORDPRESS_DB_NAME
+          value: wordpress
+        
+        - name: WP_REDIS_HOST
+          value: "redis-master"
+        - name: WP_REDIS_PORT
+          value: "6379"
+        - name: WP_REDIS_PASSWORD
+          value: "Lhj230200601"
+        - name: WP_REDIS_TIMEOUT
+          value: "1"
+        - name: WP_REDIS_DATABASE
+          value: "0"
+        
+        command: ["sh", "-c"]
+        args:
+        - |
+          wp plugin install redis-cache --activate --allow-root
+          wp redis enable --allow-root
+          exec apache2-foreground
+        ports:
+        - containerPort: 80
+        volumeMounts:
+        - name: wordpress-data
+          mountPath: /var/www/html
+      volumes:
+      - name: wordpress-data
+        persistentVolumeClaim:
+          claimName: wordpress-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: wordpress
+  namespace: lamp
+spec:
+  type: NodePort
+  selector:
+    app: wordpress
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
+      nodePort: 30080
