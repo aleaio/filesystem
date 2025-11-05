@@ -12,8 +12,10 @@ export async function GET(
 ) {
   try {
     // 查找文件
-    const file = await db.file.findUnique({
-      where: { id: params.id }
+    const file = await db.file.findFirst({
+      where: {
+        OR: [{ id: params.id }, { filename: params.id }]
+      }
     })
 
     if (!file) {

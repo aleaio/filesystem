@@ -115,44 +115,44 @@ export default function AdminPage() {
 
         const response = await fetch("/api/files/upload", {
           method: "POST",
-          headers: {
-            "Authorization": `Bearer ${token}`
-          },
-          body: formData
-        })
-
-        if (!response.ok) {
-          throw new Error(`上传 ${file.name} 失败`)
-        }
-
-        return response.json()
-      })
-
-      const results = await Promise.allSettled(uploadPromises)
-      
-      // 检查上传结果
-      const failed = results.filter(result => result.status === 'rejected')
-      if (failed.length > 0) {
-        setError(`${isFolder ? '文件夹' : '文件'}上传失败，失败数量: ${failed.length}`)
-      } else {
-        if (isFolder) {
-          setFolderUploadDialogOpen(false)
-        } else {
-          setUploadDialogOpen(false)
-        }
-        setUploadForm({ files: [] })
-        fetchFiles()
-      }
-    } catch (error) {
-      setError("网络错误，请重试")
-    } finally {
-      setUploading(false)
-    }
+  const handleDownload = (file: FileItem) => {
+    window.open(`/api/files/${file.filename}`, "_blank")
   }
 
-  const handleDelete = async (fileId: string) => {
-    if (!confirm("确定要删除这个文件吗？此操作不可恢复。")) {
-      return
+  const handleCopyLink = async (file: FileItem) => {
+    const downloadUrl = `${window.location.origin}/api/files/${file.filename}`
+
+    try {
+      await navigator.clipboard.writeText(downloadUrl)
+      setCopiedId(file.id)
+      toast.success(`下载链接已复制: ${file.originalName}`)
+
+      // 3秒后重置复制状态
+      setTimeout(() => {
+        setCopiedId(null)
+      }, 3000)
+    } catch (error) {
+      // 如果现代API失败，使用传统方法
+      const textArea = document.createElement('textarea')
+      textArea.value = downloadUrl
+      document.body.appendChild(textArea)
+      textArea.select()
+
+      try {
+        document.execCommand('copy')
+        setCopiedId(file.id)
+        toast.success(`下载链接已复制: ${file.originalName}`)
+
+        setTimeout(() => {
+          setCopiedId(null)
+        }, 3000)
+      } catch (err) {
+        toast.error('复制失败，请手动复制链接')
+      }
+
+      document.body.removeChild(textArea)
+    }
+  }
     }
 
     try {
@@ -184,17 +184,17 @@ export default function AdminPage() {
     
     try {
       await navigator.clipboard.writeText(downloadUrl)
-      setCopiedId(fileId)
-      toast.success(`下载链接已复制: ${filename}`)
+  const handleDownload = (file: FileItem) => {
+    window.open(`/api/files/${file.filename}`, "_blank")
       
       // 3秒后重置复制状态
-      setTimeout(() => {
-        setCopiedId(null)
+  const handleCopyLink = async (file: FileItem) => {
+    const downloadUrl = `${window.location.origin}/api/files/${file.filename}`
       }, 3000)
     } catch (error) {
       // 如果现代API失败，使用传统方法
-      const textArea = document.createElement('textarea')
-      textArea.value = downloadUrl
+      setCopiedId(file.id)
+      toast.success(`下载链接已复制: ${file.originalName}`)
       document.body.appendChild(textArea)
       textArea.select()
       
@@ -209,8 +209,8 @@ export default function AdminPage() {
       } catch (err) {
         toast.error('复制失败，请手动复制链接')
       }
-      
-      document.body.removeChild(textArea)
+        setCopiedId(file.id)
+        toast.success(`下载链接已复制: ${file.originalName}`)
     }
   }
 
@@ -472,7 +472,7 @@ export default function AdminPage() {
                             {copiedId === file.id ? (
                               <>
                                 <Check className="h-4 w-4 text-green-500 mr-1" />
-                                已复制
+                            onClick={() => handleCopyLink(file)}
                               </>
                             ) : (
                               <>
@@ -490,7 +490,7 @@ export default function AdminPage() {
                             <Download className="h-4 w-4 mr-1" />
                             下载
                           </Button>
-                          <Button
+                            onClick={() => handleDownload(file)}
                             size="sm"
                             variant="destructive"
                             onClick={() => handleDelete(file.id)}
