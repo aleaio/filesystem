@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import bcrypt from 'bcryptjs'
-import jwt from 'jsonwebtoken'
-
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key'
+import { signAdminToken } from '@/lib/auth'
 
 export async function POST(request: NextRequest) {
   try {
@@ -29,13 +27,9 @@ export async function POST(request: NextRequest) {
     }
 
     // 生成JWT token
-    const token = jwt.sign(
-      { adminId: admin.id, username: admin.username },
-      JWT_SECRET,
-      { expiresIn: '24h' }
-    )
+    const token = signAdminToken({ adminId: admin.id, username: admin.username })
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       token,
       admin: {
         id: admin.id,

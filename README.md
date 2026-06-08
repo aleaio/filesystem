@@ -16,11 +16,13 @@
 - ✅ 文件搜索功能
 - ✅ 文件描述信息
 
-## 默认管理员账号
+## 管理员账号
 
-- **用户名**: `admin`
-- **密码**: `admin123`
-- ⚠️ **重要**: 首次登录后请立即修改密码！
+管理员账号通过环境变量创建，不再提供固定默认密码：
+
+- **用户名**: 默认 `admin`，可通过 `ADMIN_USERNAME` 修改
+- **密码**: 必须通过 `ADMIN_PASSWORD` 设置
+- ⚠️ **重要**: 请使用强密码，并妥善保存。
 
 ## 使用方法
 
@@ -67,39 +69,60 @@ curl "http://localhost:3000/api/files/{FILE_ID}/download" -o filename
 ## 文件存储
 
 - 所有文件存储在 `uploads/` 目录下
-- 文件名会自动重命名为唯一格式（时间戳+随机字符串）
+- 文件名会自动重命名为唯一格式（时间戳+UUID）
 - 原始文件名保存在数据库中
+- 默认单文件上传上限为 100MB，可通过 `MAX_UPLOAD_BYTES` 调整
 
 ## 安全说明
 
 - 管理员密码使用 bcrypt 加密存储
 - 使用 JWT token 进行身份验证
+- 生产环境必须设置 `JWT_SECRET`
 - 文件上传限制：仅管理员可上传
 - 文件删除限制：仅管理员可删除
 
 ## 部署说明
 
-1. 确保安装了所有依赖：
+1. 创建环境变量文件：
+   ```bash
+   cp .env.example .env
+   ```
+
+   然后编辑 `.env`，至少设置：
+   ```bash
+   DATABASE_URL="file:../db/custom.db"
+   JWT_SECRET="请替换为一串足够长的随机密钥"
+   ADMIN_USERNAME="admin"
+   ADMIN_PASSWORD="请替换为强密码"
+   ```
+
+2. 确保安装了所有依赖：
    ```bash
    npm install
    ```
 
-2. 初始化数据库：
+3. 初始化数据库：
    ```bash
    npm run db:push
    ```
 
-3. 创建管理员账号：
+4. 创建管理员账号：
    ```bash
    npx tsx scripts/create-admin.ts
    ```
 
-4. 启动开发服务器：
+5. 开发环境启动：
    ```bash
    npm run dev
    ```
 
-5. 访问 `http://localhost:3000`
+6. 生产环境启动：
+   ```bash
+   npm run build
+   npm run start
+   ```
+
+7. 访问 `http://localhost:3000`
 
 ## 技术栈
 
@@ -111,7 +134,7 @@ curl "http://localhost:3000/api/files/{FILE_ID}/download" -o filename
 
 ## 注意事项
 
-1. **生产环境部署前请修改默认密码**
+1. **生产环境部署前请设置强密码和 `JWT_SECRET`**
 2. **建议配置反向代理（如 Nginx）**
 3. **定期备份 uploads 目录和数据库文件**
 4. **大文件上传可能需要调整服务器配置**

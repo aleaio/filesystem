@@ -1,31 +1,21 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Download, Search, File, Folder, HardDrive, Copy, Check } from "lucide-react"
+import { Skeleton } from "@/components/ui/skeleton"
+import { Search, FolderOpen, Files, LogIn, LayoutDashboard, LogOut } from "lucide-react"
 import { formatFileSize } from "@/lib/utils"
+import { FileExplorer, type FileItem } from "@/components/file-explorer"
 import { useAuth } from "@/hooks/use-auth"
 import { useRouter } from "next/navigation"
-import { toast } from "sonner"
-
-interface FileItem {
-  id: string
-  filename: string
-  originalName: string
-  size: number
-  mimeType: string
-  createdAt: string
-}
 
 export default function Home() {
   const [files, setFiles] = useState<FileItem[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
-  const [copiedId, setCopiedId] = useState<string | null>(null)
-  const { isAdmin, admin, loading: authLoading, logout } = useAuth()
+  const { isAdmin, loading: authLoading, logout } = useAuth()
   const router = useRouter()
 
   useEffect(() => {
@@ -46,55 +36,7 @@ export default function Home() {
     }
   }
 
-  const filteredFiles = files.filter(file =>
-    file.originalName.toLowerCase().includes(searchTerm.toLowerCase())
-  )
-
-  const getFileIcon = (mimeType: string) => {
-    if (mimeType.startsWith("image/")) return <File className="h-4 w-4 text-blue-500" />
-    if (mimeType.includes("archive") || mimeType.includes("zip")) return <Folder className="h-4 w-4 text-yellow-500" />
-    if (mimeType.includes("iso") || mimeType.includes("disk")) return <HardDrive className="h-4 w-4 text-purple-500" />
-    return <File className="h-4 w-4 text-gray-500" />
-  }
-
-  const handleDownload = (fileId: string, filename: string) => {
-    window.open(`/api/files/${fileId}/download`, "_blank")
-  }
-
-  const handleCopyLink = async (fileId: string, filename: string) => {
-    const downloadUrl = `${window.location.origin}/api/files/${fileId}/download`
-    
-    try {
-      await navigator.clipboard.writeText(downloadUrl)
-      setCopiedId(fileId)
-      toast.success(`下载链接已复制: ${filename}`)
-      
-      // 3秒后重置复制状态
-      setTimeout(() => {
-        setCopiedId(null)
-      }, 3000)
-    } catch (error) {
-      // 如果现代API失败，使用传统方法
-      const textArea = document.createElement('textarea')
-      textArea.value = downloadUrl
-      document.body.appendChild(textArea)
-      textArea.select()
-      
-      try {
-        document.execCommand('copy')
-        setCopiedId(fileId)
-        toast.success(`下载链接已复制: ${filename}`)
-        
-        setTimeout(() => {
-          setCopiedId(null)
-        }, 3000)
-      } catch (err) {
-        toast.error('复制失败，请手动复制链接')
-      }
-      
-      document.body.removeChild(textArea)
-    }
-  }
+  const totalSize = files.reduce((sum, file) => sum + file.size, 0)
 
   const handleAdminAction = () => {
     if (isAdmin) {
@@ -120,148 +62,103 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="border-b">
-        <div className="container mx-auto px-4 py-6">
-          <div className="flex items-center justify-between">
+      <header className="sticky top-0 z-30 border-b bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <div className="container mx-auto flex h-16 items-center justify-between px-4">
+          <div className="flex items-center gap-3">
+            <div className="flex size-10 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm">
+              <Files className="size-5" />
+            </div>
             <div>
-              <h1 className="text-2xl font-bold">文件共享</h1>
+              <h1 className="text-lg font-semibold leading-tight tracking-tight">文件共享</h1>
+              <p className="text-xs text-muted-foreground">浏览并下载共享文件</p>
             </div>
-            <div className="flex items-center space-x-2">
-              {isAdmin ? (
-                <>
-                  <Button variant="outline" onClick={handleAdminAction}>
-                    管理后台
-                  </Button>
-                  <Button variant="outline" onClick={handleLogout}>
-                    退出登录
-                  </Button>
-                </>
-              ) : (
-                <Button variant="outline" onClick={handleAdminAction}>
-                  管理员登录
+          </div>
+          <div className="flex items-center gap-2">
+            {isAdmin ? (
+              <>
+                <Button variant="outline" size="sm" onClick={handleAdminAction}>
+                  <LayoutDashboard className="size-4" />
+                  管理后台
                 </Button>
-              )}
-            </div>
+                <Button variant="ghost" size="sm" onClick={handleLogout}>
+                  <LogOut className="size-4" />
+                  退出登录
+                </Button>
+              </>
+            ) : (
+              <Button variant="outline" size="sm" onClick={handleAdminAction}>
+                <LogIn className="size-4" />
+                管理员登录
+              </Button>
+            )}
           </div>
         </div>
       </header>
 
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8">
-        {/* Search Bar */}
-        <div className="mb-8">
-          <div className="relative max-w-md">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+        {/* Toolbar */}
+        <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="relative w-full sm:max-w-xs">
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               placeholder="搜索文件..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10"
+              className="pl-9"
             />
           </div>
+          {!loading && files.length > 0 && (
+            <p className="text-sm text-muted-foreground">
+              共 <span className="font-medium text-foreground">{files.length}</span> 个文件
+              <span className="mx-2 text-border">·</span>
+              {formatFileSize(totalSize)}
+            </p>
+          )}
         </div>
 
-        {/* Files Table */}
+        {/* Files */}
         {loading ? (
-          <div className="text-center py-12">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
-            <p className="mt-4 text-muted-foreground">加载中...</p>
-          </div>
-        ) : filteredFiles.length === 0 ? (
           <Card>
-            <CardContent className="text-center py-12">
-              <Folder className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-medium mb-2">暂无文件</h3>
-              <p className="text-muted-foreground">
-                {searchTerm ? "没有找到匹配的文件" : "管理员还没有上传任何文件"}
-              </p>
+            <CardHeader>
+              <Skeleton className="h-5 w-32" />
+              <Skeleton className="h-4 w-48" />
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="flex items-center gap-4">
+                  <Skeleton className="size-9 rounded-md" />
+                  <Skeleton className="h-4 flex-1 max-w-[240px]" />
+                  <Skeleton className="hidden h-4 w-16 sm:block" />
+                  <Skeleton className="hidden h-6 w-16 rounded-full md:block" />
+                  <Skeleton className="ml-auto h-8 w-44 rounded-md" />
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        ) : files.length === 0 ? (
+          <Card>
+            <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+              <div className="mb-4 flex size-16 items-center justify-center rounded-full bg-muted">
+                <FolderOpen className="size-8 text-muted-foreground" />
+              </div>
+              <h3 className="mb-1 text-lg font-medium">暂无文件</h3>
+              <p className="text-sm text-muted-foreground">管理员还没有上传任何文件</p>
             </CardContent>
           </Card>
         ) : (
-          <Card>
-            <CardHeader>
-              <CardTitle>文件列表 ({filteredFiles.length})</CardTitle>
-              <CardDescription>
-                浏览和下载可用文件
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>文件名</TableHead>
-                    <TableHead>大小</TableHead>
-                    <TableHead>类型</TableHead>
-                    {isAdmin && <TableHead>上传时间</TableHead>}
-                    <TableHead className="text-right">操作</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredFiles.map((file) => (
-                    <TableRow key={file.id}>
-                      <TableCell className="font-medium">
-                        <div className="flex items-center space-x-2">
-                          {getFileIcon(file.mimeType)}
-                          <span className="max-w-[200px] truncate">
-                            {file.originalName}
-                          </span>
-                        </div>
-                      </TableCell>
-                      <TableCell>{formatFileSize(file.size)}</TableCell>
-                      <TableCell>
-                        <span className="px-2 py-1 bg-secondary text-secondary-foreground rounded-md text-xs">
-                          {file.mimeType.split("/")[1] || file.mimeType}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        {isAdmin && new Date(file.createdAt).toLocaleDateString()}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end space-x-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleCopyLink(file.id, file.originalName)}
-                            title="复制下载链接"
-                          >
-                            {copiedId === file.id ? (
-                              <>
-                                <Check className="h-4 w-4 text-green-500 mr-1" />
-                                已复制
-                              </>
-                            ) : (
-                              <>
-                                <Copy className="h-4 w-4 mr-1" />
-                                复制链接
-                              </>
-                            )}
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleDownload(file.id, file.originalName)}
-                            title="下载文件"
-                          >
-                            <Download className="h-4 w-4 mr-1" />
-                            下载
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
+          <FileExplorer files={files} searchTerm={searchTerm} showDate={isAdmin} />
         )}
       </main>
 
       {/* Footer */}
-      <footer className="border-t mt-12">
-        <div className="container mx-auto px-4 py-6">
-          <div className="text-center text-sm text-muted-foreground">
-            {/* 空的footer，保留结构 */}
+      <footer className="border-t">
+        <div className="container mx-auto flex flex-col items-center justify-between gap-2 px-4 py-6 text-sm text-muted-foreground sm:flex-row">
+          <div className="flex items-center gap-2">
+            <Files className="size-4" />
+            <span>文件共享系统</span>
           </div>
+          <p>© {new Date().getFullYear()} 文件共享系统 · 安全便捷的文件分享</p>
         </div>
       </footer>
     </div>

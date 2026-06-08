@@ -20,7 +20,7 @@ export function useAuth() {
     try {
       const token = localStorage.getItem('adminToken')
       const adminData = localStorage.getItem('adminData')
-      
+
       if (token && adminData) {
         const parsedAdmin = JSON.parse(adminData)
         setAdmin(parsedAdmin)

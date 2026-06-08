@@ -4,7 +4,7 @@ import { createServer } from 'http';
 import { Server } from 'socket.io';
 import next from 'next';
 
-const dev = process.env.NODE_ENV !== 'production';
+const dev = process.env.NODE_ENV !== 'production' && !process.argv.includes('--production');
 const currentPort = 3000;
 const hostname = '0.0.0.0';
 
@@ -12,7 +12,7 @@ const hostname = '0.0.0.0';
 async function createCustomServer() {
   try {
     // Create Next.js app
-    const nextApp = next({ 
+    const nextApp = next({
       dev,
       dir: process.cwd(),
       // In production, use the current directory where .next is located

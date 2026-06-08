@@ -1,24 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { writeFile } from 'fs/promises'
-import { join } from 'path'
 import { db } from '@/lib/db'
-import jwt from 'jsonwebtoken'
-
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key'
+import { requireAdmin } from '@/lib/auth'
+import { createStoredFilename, ensureUploadDir, getUploadPath, MAX_UPLOAD_BYTES } from '@/lib/files'
 
 export async function POST(request: NextRequest) {
   try {
-    const authHeader = request.headers.get('authorization')
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return NextResponse.json({ error: '未授权' }, { status: 401 })
-    }
-
-    const token = authHeader.substring(7)
     let decoded
     try {
-      decoded = jwt.verify(token, JWT_SECRET) as { adminId: string; username: string }
+      decoded = requireAdmin(request)
     } catch (error) {
       return NextResponse.json({ error: '无效的token' }, { status: 401 })
+    }
+
+    if (!decoded) {
+      return NextResponse.json({ error: '未授权' }, { status: 401 })
     }
 
     const data = await request.formData()
@@ -28,17 +24,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '没有选择文件' }, { status: 400 })
     }
 
+    if (file.size <= 0) {
+      return NextResponse.json({ error: '文件不能为空' }, { status: 400 })
+    }
+
+    if (file.size > MAX_UPLOAD_BYTES) {
+      return NextResponse.json({ error: '文件大小超出限制' }, { status: 413 })
+    }
+
     const bytes = await file.arrayBuffer()
     const buffer = Buffer.from(bytes)
 
     // 生成唯一文件名
-    const timestamp = Date.now()
-    const randomString = Math.random().toString(36).substring(2, 15)
-    const fileExtension = file.name.split('.').pop()
-    const filename = `${timestamp}-${randomString}.${fileExtension}`
+    const filename = createStoredFilename(file.name)
 
     // 保存文件到uploads目录
-    const path = join(process.cwd(), 'uploads', filename)
+    await ensureUploadDir()
+    const path = getUploadPath(filename)
     await writeFile(path, buffer)
 
     // 保存文件信息到数据库
@@ -53,7 +55,7 @@ export async function POST(request: NextRequest) {
       }
     })
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       message: '文件上传成功',
       file: {
         id: fileRecord.id,

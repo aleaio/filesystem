@@ -10,6 +10,16 @@ const compat = new FlatCompat({
 });
 
 const eslintConfig = [
+  {
+    ignores: [
+      ".next/**",
+      "node_modules/**",
+      "coverage/**",
+      "out/**",
+      "build/**",
+      "next-env.d.ts",
+    ],
+  },
   ...compat.extends("next/core-web-vitals", "next/typescript"),
   {
     rules: {
@@ -19,17 +29,17 @@ const eslintConfig = [
       "@typescript-eslint/no-non-null-assertion": "off",
       "@typescript-eslint/ban-ts-comment": "off",
       "@typescript-eslint/prefer-as-const": "off",
-      
+
       // React 相关规则
       "react-hooks/exhaustive-deps": "off",
       "react/no-unescaped-entities": "off",
       "react/display-name": "off",
       "react/prop-types": "off",
-      
+
       // Next.js 相关规则
       "@next/next/no-img-element": "off",
       "@next/next/no-html-link-for-pages": "off",
-      
+
       // 一般JavaScript规则
       "prefer-const": "off",  // 关闭prefer-const规则
       "no-unused-vars": "off",

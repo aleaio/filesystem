@@ -1,31 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { unlink } from 'fs/promises'
-import { join } from 'path'
 import { db } from '@/lib/db'
-import jwt from 'jsonwebtoken'
-
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key'
+import { requireAdmin } from '@/lib/auth'
+import { getUploadPath } from '@/lib/files'
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const authHeader = request.headers.get('authorization')
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return NextResponse.json({ error: '未授权' }, { status: 401 })
-    }
-
-    const token = authHeader.substring(7)
     try {
-      jwt.verify(token, JWT_SECRET)
+      if (!requireAdmin(request)) {
+        return NextResponse.json({ error: '未授权' }, { status: 401 })
+      }
     } catch (error) {
       return NextResponse.json({ error: '无效的token' }, { status: 401 })
     }
 
+    const { id } = await params
+
     // 查找文件
     const file = await db.file.findUnique({
-      where: { id: params.id }
+      where: { id }
     })
 
     if (!file) {
@@ -33,7 +29,7 @@ export async function DELETE(
     }
 
     // 删除物理文件
-    const filePath = join(process.cwd(), 'uploads', file.filename)
+    const filePath = getUploadPath(file.filename)
     try {
       await unlink(filePath)
     } catch (error) {
@@ -43,7 +39,7 @@ export async function DELETE(
 
     // 删除数据库记录
     await db.file.delete({
-      where: { id: params.id }
+      where: { id }
     })
 
     return NextResponse.json({ message: '文件删除成功' })

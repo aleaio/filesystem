@@ -110,8 +110,8 @@ export default function SocketDemo() {
               disabled={!isConnected}
               className="flex-1"
             />
-            <Button 
-              onClick={sendMessage} 
+            <Button
+              onClick={sendMessage}
               disabled={!isConnected || !inputMessage.trim()}
             >
               Send

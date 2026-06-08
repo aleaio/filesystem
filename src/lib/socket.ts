@@ -3,7 +3,7 @@ import { Server } from 'socket.io';
 export const setupSocket = (io: Server) => {
   io.on('connection', (socket) => {
     console.log('Client connected:', socket.id);
-    
+
     // Handle messages
     socket.on('message', (msg: { text: string; senderId: string }) => {
       // Echo: broadcast message only the client who send the message

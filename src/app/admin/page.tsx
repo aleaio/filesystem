@@ -4,40 +4,31 @@ import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { 
-  Upload, 
-  Download, 
-  Trash2, 
-  Plus, 
-  Search, 
-  File, 
-  Folder, 
+import {
+  Upload,
+  Search,
   HardDrive,
   LogOut,
   AlertCircle,
-  Copy,
-  Check,
-  FileText,
-  FolderOpen
+  FolderOpen,
+  Files,
+  Home,
+  Clock,
+  Loader2,
 } from "lucide-react"
 import { formatFileSize } from "@/lib/utils"
+import { FileExplorer, type FileItem } from "@/components/file-explorer"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/hooks/use-auth"
 import { toast } from "sonner"
 
-interface FileItem {
-  id: string
-  filename: string
-  originalName: string
-  size: number
-  mimeType: string
-  createdAt: string
+type DirectoryInputProps = React.InputHTMLAttributes<HTMLInputElement> & {
+  webkitdirectory?: string
 }
 
 export default function AdminPage() {
@@ -51,9 +42,11 @@ export default function AdminPage() {
   const [uploadForm, setUploadForm] = useState({
     files: [] as File[],
   })
-  const [copiedId, setCopiedId] = useState<string | null>(null)
   const router = useRouter()
-  const { isAdmin, admin, logout, loading: authLoading } = useAuth()
+  const { isAdmin, logout, loading: authLoading } = useAuth()
+  const directoryInputProps: DirectoryInputProps = {
+    webkitdirectory: "directory",
+  }
 
   useEffect(() => {
     if (!authLoading) {
@@ -91,9 +84,10 @@ export default function AdminPage() {
     }
   }
 
-  const filteredFiles = files.filter(file =>
-    file.originalName.toLowerCase().includes(searchTerm.toLowerCase())
-  )
+  const totalSize = files.reduce((sum, file) => sum + file.size, 0)
+  const latestUpload = files.length
+    ? new Date(Math.max(...files.map(f => new Date(f.createdAt).getTime()))).toLocaleDateString()
+    : "—"
 
   const handleUpload = async (e: React.FormEvent, isFolder: boolean = false) => {
     e.preventDefault()
@@ -107,9 +101,8 @@ export default function AdminPage() {
 
     try {
       const token = localStorage.getItem("adminToken")
-      
-      // 为每个文件创建单独的上传请求
-      const uploadPromises = Array.from(uploadForm.files).map(async (file) => {
+
+      const uploadFile = async (file: File) => {
         const formData = new FormData()
         formData.append("file", file)
 
@@ -126,10 +119,17 @@ export default function AdminPage() {
         }
 
         return response.json()
-      })
+      }
 
-      const results = await Promise.allSettled(uploadPromises)
-      
+      const results: PromiseSettledResult<unknown>[] = []
+      const concurrency = 3
+      const selectedFiles = Array.from(uploadForm.files)
+
+      for (let i = 0; i < selectedFiles.length; i += concurrency) {
+        const chunk = selectedFiles.slice(i, i + concurrency)
+        results.push(...await Promise.allSettled(chunk.map(uploadFile)))
+      }
+
       // 检查上传结果
       const failed = results.filter(result => result.status === 'rejected')
       if (failed.length > 0) {
@@ -141,6 +141,7 @@ export default function AdminPage() {
           setUploadDialogOpen(false)
         }
         setUploadForm({ files: [] })
+        toast.success(`${isFolder ? '文件夹' : '文件'}上传成功`)
         fetchFiles()
       }
     } catch (error) {
@@ -150,80 +151,9 @@ export default function AdminPage() {
     }
   }
 
-  const handleDelete = async (fileId: string) => {
-    if (!confirm("确定要删除这个文件吗？此操作不可恢复。")) {
-      return
-    }
-
-    try {
-      const token = localStorage.getItem("adminToken")
-      const response = await fetch(`/api/files/${fileId}`, {
-        method: "DELETE",
-        headers: {
-          "Authorization": `Bearer ${token}`
-        }
-      })
-
-      if (response.ok) {
-        fetchFiles()
-      } else {
-        const data = await response.json()
-        setError(data.error || "删除失败")
-      }
-    } catch (error) {
-      setError("网络错误，请重试")
-    }
-  }
-
-  const handleDownload = (fileId: string, filename: string) => {
-    window.open(`/api/files/${fileId}/download`, "_blank")
-  }
-
-  const handleCopyLink = async (fileId: string, filename: string) => {
-    const downloadUrl = `${window.location.origin}/api/files/${fileId}/download`
-    
-    try {
-      await navigator.clipboard.writeText(downloadUrl)
-      setCopiedId(fileId)
-      toast.success(`下载链接已复制: ${filename}`)
-      
-      // 3秒后重置复制状态
-      setTimeout(() => {
-        setCopiedId(null)
-      }, 3000)
-    } catch (error) {
-      // 如果现代API失败，使用传统方法
-      const textArea = document.createElement('textarea')
-      textArea.value = downloadUrl
-      document.body.appendChild(textArea)
-      textArea.select()
-      
-      try {
-        document.execCommand('copy')
-        setCopiedId(fileId)
-        toast.success(`下载链接已复制: ${filename}`)
-        
-        setTimeout(() => {
-          setCopiedId(null)
-        }, 3000)
-      } catch (err) {
-        toast.error('复制失败，请手动复制链接')
-      }
-      
-      document.body.removeChild(textArea)
-    }
-  }
-
   const handleLogout = () => {
     logout()
     router.push("/")
-  }
-
-  const getFileIcon = (mimeType: string) => {
-    if (mimeType.startsWith("image/")) return <File className="h-4 w-4 text-blue-500" />
-    if (mimeType.includes("archive") || mimeType.includes("zip")) return <Folder className="h-4 w-4 text-yellow-500" />
-    if (mimeType.includes("iso") || mimeType.includes("disk")) return <HardDrive className="h-4 w-4 text-purple-500" />
-    return <File className="h-4 w-4 text-gray-500" />
   }
 
   // 如果正在加载认证状态，显示加载页面
@@ -250,24 +180,31 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-muted/20">
       {/* Header */}
-      <header className="border-b">
-        <div className="container mx-auto px-4 py-6">
-          <div className="flex items-center justify-between">
+      <header className="sticky top-0 z-30 border-b bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <div className="container mx-auto flex h-16 items-center justify-between px-4">
+          <div className="flex items-center gap-3">
+            <div className="flex size-10 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm">
+              <Files className="size-5" />
+            </div>
             <div>
-              <h1 className="text-2xl font-bold">文件共享 - 管理后台</h1>
-              <p className="text-sm text-muted-foreground">文件管理和上传</p>
+              <div className="flex items-center gap-2">
+                <h1 className="text-lg font-semibold leading-tight tracking-tight">文件共享</h1>
+                <Badge variant="secondary" className="font-normal">管理后台</Badge>
+              </div>
+              <p className="text-xs text-muted-foreground">文件管理和上传</p>
             </div>
-            <div className="flex items-center space-x-2">
-              <Button variant="outline" onClick={() => router.push("/")}>
-                返回首页
-              </Button>
-              <Button variant="outline" onClick={handleLogout}>
-                <LogOut className="h-4 w-4 mr-2" />
-                退出登录
-              </Button>
-            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => router.push("/")}>
+              <Home className="size-4" />
+              <span className="hidden sm:inline">返回首页</span>
+            </Button>
+            <Button variant="ghost" size="sm" onClick={handleLogout}>
+              <LogOut className="size-4" />
+              <span className="hidden sm:inline">退出登录</span>
+            </Button>
           </div>
         </div>
       </header>
@@ -281,14 +218,35 @@ export default function AdminPage() {
           </Alert>
         )}
 
+        {/* Stats */}
+        <div className="mb-6 grid gap-4 sm:grid-cols-3">
+          {[
+            { label: "文件总数", value: loading ? "—" : `${files.length}`, Icon: Files },
+            { label: "总占用空间", value: loading ? "—" : formatFileSize(totalSize), Icon: HardDrive },
+            { label: "最近更新", value: loading ? "—" : latestUpload, Icon: Clock },
+          ].map((stat) => (
+            <Card key={stat.label} className="py-0">
+              <CardContent className="flex items-center gap-4 p-5">
+                <div className="flex size-11 shrink-0 items-center justify-center rounded-lg border bg-muted/50">
+                  <stat.Icon className="size-5 text-muted-foreground" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm text-muted-foreground">{stat.label}</p>
+                  <p className="truncate text-2xl font-semibold tracking-tight tabular-nums">{stat.value}</p>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
         {/* Actions */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
-          <div className="flex items-center space-x-4">
+        <div className="mb-6 flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+          <div className="flex items-center gap-2">
             {/* 文件上传按钮 */}
             <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
               <DialogTrigger asChild>
                 <Button>
-                  <FileText className="h-4 w-4 mr-2" />
+                  <Upload className="size-4" />
                   上传文件
                 </Button>
               </DialogTrigger>
@@ -330,7 +288,12 @@ export default function AdminPage() {
                       取消
                     </Button>
                     <Button type="submit" disabled={uploading}>
-                      {uploading ? "上传中..." : "上传"}
+                      {uploading ? (
+                        <>
+                          <Loader2 className="size-4 animate-spin" />
+                          上传中...
+                        </>
+                      ) : "上传"}
                     </Button>
                   </div>
                 </form>
@@ -341,7 +304,7 @@ export default function AdminPage() {
             <Dialog open={folderUploadDialogOpen} onOpenChange={setFolderUploadDialogOpen}>
               <DialogTrigger asChild>
                 <Button variant="outline">
-                  <FolderOpen className="h-4 w-4 mr-2" />
+                  <FolderOpen className="size-4" />
                   上传文件夹
                 </Button>
               </DialogTrigger>
@@ -368,7 +331,7 @@ export default function AdminPage() {
                         }
                       }}
                       required
-                      webkitdirectory="directory"
+                      {...directoryInputProps}
                     />
                     <p className="text-sm text-muted-foreground">
                       选择单个文件夹，将自动上传其中的所有文件和子文件夹
@@ -383,130 +346,65 @@ export default function AdminPage() {
                       取消
                     </Button>
                     <Button type="submit" disabled={uploading}>
-                      {uploading ? "上传中..." : "上传"}
+                      {uploading ? (
+                        <>
+                          <Loader2 className="size-4 animate-spin" />
+                          上传中...
+                        </>
+                      ) : "上传"}
                     </Button>
                   </div>
                 </form>
               </DialogContent>
             </Dialog>
           </div>
-          
-          <div className="relative max-w-md">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+
+          <div className="relative w-full sm:max-w-xs">
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               placeholder="搜索文件..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10"
+              className="pl-9"
             />
           </div>
         </div>
 
-        {/* Files Table */}
+        {/* Files */}
         {loading ? (
-          <div className="text-center py-12">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
-            <p className="mt-4 text-muted-foreground">加载中...</p>
-          </div>
-        ) : filteredFiles.length === 0 ? (
           <Card>
-            <CardContent className="text-center py-12">
-              <Folder className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-medium mb-2">暂无文件</h3>
-              <p className="text-muted-foreground mb-4">
-                {searchTerm ? "没有找到匹配的文件" : "还没有上传任何文件"}
-              </p>
+            <CardHeader>
+              <Skeleton className="h-5 w-32" />
+              <Skeleton className="h-4 w-56" />
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="flex items-center gap-4">
+                  <Skeleton className="size-9 rounded-md" />
+                  <Skeleton className="h-4 flex-1 max-w-[240px]" />
+                  <Skeleton className="hidden h-4 w-16 sm:block" />
+                  <Skeleton className="hidden h-6 w-16 rounded-full md:block" />
+                  <Skeleton className="ml-auto h-8 w-56 rounded-md" />
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        ) : files.length === 0 ? (
+          <Card>
+            <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+              <div className="mb-4 flex size-16 items-center justify-center rounded-full bg-muted">
+                <FolderOpen className="size-8 text-muted-foreground" />
+              </div>
+              <h3 className="mb-1 text-lg font-medium">暂无文件</h3>
+              <p className="mb-4 text-sm text-muted-foreground">还没有上传任何文件</p>
               <Button onClick={() => setUploadDialogOpen(true)}>
-                <Upload className="h-4 w-4 mr-2" />
+                <Upload className="size-4" />
                 上传第一个文件
               </Button>
             </CardContent>
           </Card>
         ) : (
-          <Card>
-            <CardHeader>
-              <CardTitle>文件列表 ({filteredFiles.length})</CardTitle>
-              <CardDescription>
-                管理所有上传的文件，支持下载和删除操作
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>文件名</TableHead>
-                    <TableHead>大小</TableHead>
-                    <TableHead>类型</TableHead>
-                    <TableHead>上传时间</TableHead>
-                    <TableHead className="text-right">操作</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredFiles.map((file) => (
-                    <TableRow key={file.id}>
-                      <TableCell className="font-medium">
-                        <div className="flex items-center space-x-2">
-                          {getFileIcon(file.mimeType)}
-                          <span className="max-w-[200px] truncate">
-                            {file.originalName}
-                          </span>
-                        </div>
-                      </TableCell>
-                      <TableCell>{formatFileSize(file.size)}</TableCell>
-                      <TableCell>
-                        <Badge variant="secondary">
-                          {file.mimeType.split("/")[1] || file.mimeType}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        {new Date(file.createdAt).toLocaleDateString()}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end space-x-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleCopyLink(file.id, file.originalName)}
-                            title="复制下载链接"
-                          >
-                            {copiedId === file.id ? (
-                              <>
-                                <Check className="h-4 w-4 text-green-500 mr-1" />
-                                已复制
-                              </>
-                            ) : (
-                              <>
-                                <Copy className="h-4 w-4 mr-1" />
-                                复制链接
-                              </>
-                            )}
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleDownload(file.id, file.originalName)}
-                            title="下载文件"
-                          >
-                            <Download className="h-4 w-4 mr-1" />
-                            下载
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            onClick={() => handleDelete(file.id)}
-                            title="删除文件"
-                          >
-                            <Trash2 className="h-4 w-4 mr-1" />
-                            删除
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
+          <FileExplorer files={files} searchTerm={searchTerm} showDate canManage onChanged={fetchFiles} />
         )}
       </main>
     </div>
